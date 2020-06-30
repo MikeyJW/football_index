@@ -1,0 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Jun 30 20:36:27 2020
+
+@author: MikeyJW
+"""
+
+Correlation between player returns and mkt returns is extremely weak.
+There is too little liquidity such that most players prices don't move across
+most days. Therefore the market will always move w/ apparent 0 correlation w/ 
+individual players, we may need to use a portfolio of the topX traded players
+as a mkt pf. Otherwise were struggling to get results. 
