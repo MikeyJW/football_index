@@ -70,10 +70,8 @@ mkt_beta = cov / df['daily_returns'].std() ** 2
 corr = df[['daily_returns', 'daily_mkt_returns']].corr()
 
 
-# How much do player returns correlate to market returns???
-
-
-# Market beta dispersion, players should all be fairly close to 1?
+# TODO: How much do player returns correlate to market returns??? (+ mkt betas)
+# TODO: Market beta dispersion, players should all be fairly close to 1?
 
 # Correlation / Regression result [ON HIGH LIQUIDITY PLAYERS]??? R^2 val.?
 
@@ -82,8 +80,5 @@ from sklearn.linear_model import LinearRegression
 X = df.loc[(slice(None), 'Jadon Sancho'), :]['daily_returns'].dropna().values.reshape(-1,1)
 y = df.loc[(slice(None), 'Jadon Sancho'), :]['daily_mkt_returns'].dropna().values.reshape(-1,1)
 reg = LinearRegression().fit(X, y)
-
-
-
 
 
