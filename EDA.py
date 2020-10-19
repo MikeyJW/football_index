@@ -10,6 +10,7 @@ Created on Tue Jun 30 13:13:43 2020
 #TODO: Remove short smaples from the mkt beta calculations (or do the top 100 format)
 #TODO: Compare returns to SPY
 #TODO: Think of more classic stock market stuff
+#TODO: Make top 200 mask dynamic
 
 import pandas as pd
 import numpy as np
@@ -29,20 +30,22 @@ df['daily_mkt_log_returns'] = df['ave_mkt_price'].apply(np.log).groupby(level=1)
 
 first_day = df.loc[('2020-06-06', slice(None)), :]
 top200_mask = first_day.nlargest(200, 'EndofDayPrice').index.droplevel(0).values
-top200 = df.loc[(slice(None), top200_mask), 'EndofDayPrice']
+top200 = df.loc[(slice(None), top200_mask), :]
 
 
-# Extract market returns
-mkt_returns = df.groupby(level=0)['daily_mkt_returns'].head(1).values
+# Gen informative plots
+
+
 # Extract index price
 index_price = df.groupby(level=0)['ave_mkt_price'].head(1).values
 # Benchmark (holding roughly the same amount of all players TODO: THIS NEEDS REFINING [if we can't hold equal values of all players???])
-compounding_index_return = df['daily_mkt_log_returns'].groupby(level=0).head(1).droplevel(1)
-compounding_index_return.cumsum().apply(np.exp).plot(title='Benchmark')
+mkt_log_returns = df['daily_mkt_log_returns'].groupby(level=0).head(1).droplevel(1)
+mkt_log_returns.cumsum().apply(np.exp).plot(title='Benchmark')
 
 # PLOT: Market aggregates
-# TODO: put epl start end dates in for reference.
-plt.plot(mkt_returns)
+# TODO: put epl start/end dates in for reference.
+mkt_returns = mkt_log_returns.apply(np.exp)
+mkt_returns.plot(title='Daily market returns')
 plt.plot(index_price) # Compare this to the money in circulation stats from FIE
 sns.kdeplot(mkt_returns) # Comp to norm dist/SPY
 plt.boxplot(mkt_returns.dropna())
@@ -58,8 +61,6 @@ mkt_beta = cov / (df.groupby(level=1)['daily_returns'].std() ** 2)
 # PLOT: Market beta dispersion
 sns.kdeplot(mkt_beta.dropna())
 
-
-# Begin scouting basic quant strategy: 
 
 # Business day effects
 df['dayofweek'] = df.index.get_level_values(0)
@@ -78,53 +79,102 @@ sns.violinplot(x="dayofweek", y='daily_mkt_returns', data=mkt_returns)
 
 
 
+####################################################################
 
 
 
 
-# STRATEGY 1: Momentum
 
-# Buy winners over different time periods, compare to market returns.
-# groupby playername, get return on end of day price for each 
-df['prev_week_return'] = df['EndofDayPrice'].groupby(level=1).pct_change(14)
+# Begin scouting basic quant strategy: 
 
-# Backtesting
-
-technicals_df = df['prev_week_return'].unstack().fillna(-1)
-
-def momentum_strat(technicals_df):
-    'Find top n momentum players from lookback period'
-    # Find 10th place cutoff
-    transposed = technicals_df.transpose()
-    cutoff = transposed.sort_values(by=transposed.columns[0]).iloc[-15].values[0]
-    # Generate portfolio dataframe
-    portfolio_df = transposed
-    portfolio_df[portfolio_df.values >= cutoff] = 1
-    portfolio_df[portfolio_df < cutoff] = 0
-    return portfolio_df.transpose()
-
-portfolio_df = technicals_df.groupby(level=0).apply(momentum_strat)
-# Shift portfolio positions to avoid look-ahead bias
-portfolio_df = portfolio_df.shift(1)
-
-# Fix optimal portfolio positions for n days
 def custom_resampler(resampled_df):
     return resampled_df.head(1)
 
-fixed_portfolio = portfolio_df.resample('14D').apply(custom_resampler)
-fixed_portfolio = fixed_portfolio.resample('1D').ffill()
+def find_cutoff(data):
+    return data.sort_values()[-15]
 
-# Find strategy returns
-daily_log_returns = df['daily_log_returns'].unstack()
-strat_returns = fixed_portfolio * daily_log_returns[:'2020-06-15'] #Chopping off end as upsample wont fill up the end of the dataframe
-strat_returns['total_returns'] = strat_returns.mean(axis=1)
+def momentum_strat(data, lookback_window=13, holding_period=14, param_dict=None):
+    'Buy top n momentum players from lookback period and hold for duration of holding period'
+    # TODO: Val this actually works
+    # TODO: FIX THE CUTOFF SITCH (we hold over 10 positions some days. Tie-breaker, highest price???)
+    # If dictionary passed, use those parameters instead
+    if param_dict:
+        lookback_window = param_dict['lookback_window']
+        holding_period = param_dict['holding_period']
+    
+    technicals_df = data['EndofDayPrice'].groupby(level=1).pct_change(lookback_window) # Make momentum factor TODO: USE LOG RETURNS FOR THIS AS WELL.
+    
+    # Find 15th place cutoff
+    # technicals_df = technicals_df.unstack().fillna(0)
+    # transposed = technicals_df.transpose()
+    cutoff = technicals_df.groupby(level=0).apply(find_cutoff)
+    
+    # Generate portfolio dataframe
+    portfolio_df = technicals_df.unstack()
+    portfolio_df[portfolio_df.values >= cutoff.values.reshape(len(cutoff),1)] = 1
+    portfolio_df[portfolio_df.values < cutoff.values.reshape(len(cutoff),1)] = 0
+    
+    # Fix positions for holding period
+    fixed_portfolio = portfolio_df.resample(str(holding_period) + 'D').apply(custom_resampler)
+    fixed_portfolio = fixed_portfolio.resample('1D').ffill()
+    fixed_portfolio.iloc[:lookback_window, :] = 0 # Wait for duration of lookback window
 
-# WARN: Remove front 14 days where we have no info
-print(strat_returns.loc['2019-07-14':, 'total_returns'].cumsum().apply(np.exp)[-1])
+    # Shift portfolio positions 1 day forward to avoid look-ahead bias
+    fixed_portfolio = fixed_portfolio.shift(1)
 
-# for starters only consider top-150, then gridsearch???
+    daily_log_returns = data['daily_log_returns'].unstack()
+    strat_returns = fixed_portfolio * daily_log_returns[:-(holding_period-1)] # TODO: FIX (Chopping off end of price info as upsample wont fill up the end of the dataframe)
+    strat_returns['cumulative_pf_returns'] = strat_returns.mean(axis=1).cumsum().apply(np.exp)
+    
+    return strat_returns['cumulative_pf_returns']
 
-# Gridsearch holding period with spread + commission averages
+
+from sklearn.model_selection import ParameterGrid
+
+def custom_grid_search(data, strategy, param_grid):
+    'Grid search function for quant strategy optimisation'
+    # Init objects to record results
+    results = {} 
+    results_list = []
+    i = 0
+    
+    # Try all combinations of parameters from param_grid
+    param_combos = ParameterGrid(param_grid)
+    
+    for param_dict in param_combos:
+        # Extract and input params
+        strat_returns = strategy(data, param_dict=param_dict)
+        
+        # Record results
+        result = strat_returns[-1] # something like that???
+        
+        results['Combination ' + str(i)] = param_dict
+        results['Combination ' + str(i)]['test_period_return'] = result        
+        i += 1
+        
+        results_list.append(result)
+
+    # Identify top performing set    
+    optimal_index = results_list.index(max(results_list))
+    optimal = results['Combination ' + str(optimal_index)]
+    
+    print('Optimal: \n' + str(optimal))
+    return results
+
+
+
+# Testing the funcs out:
+
+
+data = top200
+strategy = momentum_strat
+param_grid = {'lookback_window': [7, 14, 21],
+              'holding_period': [7, 14]}
+
+custom_grid_search(data, strategy, param_grid)
+
+
+# STRATEGY 1: Price momentum
 
 # STRATEGY 2: Mean reversion
 
@@ -133,3 +183,5 @@ print(strat_returns.loc['2019-07-14':, 'total_returns'].cumsum().apply(np.exp)[-
 # STRATEGY 4: Post div. reversion
 
 # STRATEGY 5: SMAC
+
+# STRATEGY 6: EMAC
