@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# import yfinance as yf [to get spy numbers]
+# import yfinance as yf [to get spy numbers] [change environment???]
 
 # Import and organise dataframe
 df = pd.read_csv('Q32019_Q22020.csv')
@@ -34,7 +34,6 @@ top200 = df.loc[(slice(None), top200_mask), :]
 
 
 # Gen informative plots
-
 
 # Extract index price
 index_price = df.groupby(level=0)['ave_mkt_price'].head(1).values
@@ -85,83 +84,8 @@ sns.violinplot(x="dayofweek", y='daily_mkt_returns', data=mkt_returns)
 
 
 
-# Begin scouting basic quant strategy: 
-
-def custom_resampler(resampled_df):
-    return resampled_df.head(1)
-
-def find_cutoff(data):
-    return data.sort_values()[-15]
-
-def momentum_strat(data, lookback_window=14, holding_period=14, param_dict=None):
-    'Buy top n momentum players from lookback period and hold for duration of holding period'
-    # TODO: Val this actually works
-    # TODO: FIX THE CUTOFF SITCH (we hold over 10 positions some days. Tie-breaker, highest price???)
-    # If dictionary passed, use those parameters instead
-    if param_dict:
-        lookback_window = param_dict['lookback_window']
-        holding_period = param_dict['holding_period']
-    
-    technicals_df = data['EndofDayPrice'].groupby(level=1).pct_change(lookback_window) # Make momentum factor TODO: USE LOG RETURNS FOR THIS AS WELL. (diff???)
-    
-    # Find 15th place cutoff
-    cutoff = technicals_df.groupby(level=0).apply(find_cutoff)
-    
-    # Generate portfolio dataframe
-    portfolio_df = technicals_df.unstack()
-    portfolio_df[portfolio_df.values >= cutoff.values.reshape(len(cutoff),1)] = 1
-    portfolio_df[portfolio_df.values < cutoff.values.reshape(len(cutoff),1)] = 0
-    portfolio_df = portfolio_df[lookback_window+1:] # Slice off the 'warm-up' period
-    
-    # Fix positions for holding period
-    fixed_portfolio = portfolio_df.resample(str(holding_period) + 'D').apply(custom_resampler)
-    fixed_portfolio = fixed_portfolio.resample('1D').ffill()
-    #fixed_portfolio.iloc[:lookback_window, :] = 0 # Wait for duration of lookback window WAIT EARLIER
-
-    # Shift portfolio positions 1 day forward to avoid look-ahead bias
-    fixed_portfolio = fixed_portfolio.shift(1)
-
-    daily_log_returns = data['daily_log_returns'].unstack()
-    strat_returns = fixed_portfolio * daily_log_returns[fixed_portfolio.index.min():fixed_portfolio.index.max()]
-    strat_returns['cumulative_pf_returns'] = strat_returns.mean(axis=1).cumsum().apply(np.exp)
-    
-    return strat_returns['cumulative_pf_returns']
-
-from sklearn.model_selection import ParameterGrid
-
-def custom_grid_search(data, strategy, param_grid):
-    'Grid search function for quant strategy optimisation'
-    # Init objects to record results
-    results = {} 
-    results_list = []
-    i = 0
-    
-    # Try all combinations of parameters from param_grid
-    param_combos = ParameterGrid(param_grid)
-    
-    for param_dict in param_combos:
-        # Extract and input params
-        strat_returns = strategy(data, param_dict=param_dict)
-        
-        # Record results
-        result = strat_returns[-1] # something like that???
-        
-        results['Combination ' + str(i)] = param_dict
-        results['Combination ' + str(i)]['test_period_return'] = result        
-        i += 1
-        
-        results_list.append(result)
-
-    # Identify top performing set    
-    optimal_index = results_list.index(max(results_list))
-    optimal = results['Combination ' + str(optimal_index)]
-    
-    print('Optimal: \n' + str(optimal))
-    return results
-
-
-
-
+# Begin scouting basic quant strategy:
+from strategies_and_optimisation import custom_grid_search, momentum_strat, mean_reversion, post_div_drift, SMAC
 
 # STRATEGY 1: Price momentum
 data = top200
@@ -177,16 +101,73 @@ optimal_params =  {'holding_period': 7,
 
 results = momentum_strat(data, param_dict=optimal_params)
 results.plot(title='Momentum strategy cumulative returns')
-# Check Sharpe ratio?
+# TODO: Check Sharpe ratio?
+
+
 
 # STRATEGY 2: Mean reversion
-# Find biggest losers in past x period, and long them. 
+# Find biggest losers in past x period, and long them. # This is a bad strat but holding periods tell us something???
+data = top200
+strategy = mean_reversion
+param_grid = {'lookback_window': [3, 7, 14, 21],
+              'holding_period': [3, 7, 14, 21]}
+
+results = custom_grid_search(data, strategy, param_grid)
+print(results)
+
+optimal_params =  {'holding_period': 7,
+                   'lookback_window': 21}
+
+results = mean_reversion(data, param_dict=optimal_params)
+results.plot(title='Mean reversion cumulative returns')
+
 
 
 # STRATEGY 3: Post div. drift
+data = top200
+strategy = post_div_drift
+param_grid = {'holding_period': [3, 6, 13, 20]}
 
-# STRATEGY 4: Post div. reversion
+results = custom_grid_search(data, strategy, param_grid)
+print(results)
 
-# STRATEGY 5: SMAC
+optimal_params =  {'holding_period': 20}
 
-# STRATEGY 6: EMAC
+results = post_div_drift(data, param_dict=optimal_params)
+results.plot(title='Mean reversion cumulative returns')
+
+
+
+# STRATEGY 5.1: SMAC (single player)
+data = top200.loc[(slice(None),'Mohamed Salah'), 'EndofDayPrice'].unstack()
+strategy = SMAC
+param_grid = {'duration_MA1': [5, 22],
+              'duration_MA2': [5, 22]}
+
+results = custom_grid_search(data, strategy, param_grid)
+print(results)
+
+optimal_params =  {'duration_MA1': 5, 'duration_MA2': 22}
+
+results = SMAC(data, param_dict=optimal_params)
+results.plot(title='Mean reversion cumulative returns')
+
+
+
+# STRATEGY 5.2: EMAC (aggregate market)
+data = top200.loc[(slice(None),'Mohamed Salah'), 'EndofDayPrice'].unstack()
+strategy = EMAC
+param_grid = {'duration_MA1': [5, 22],
+              'duration_MA2': [5, 22]}
+
+results = custom_grid_search(data, strategy, param_grid)
+print(results)
+
+optimal_params =  {'duration_MA1': 5, 'duration_MA2': 22}
+
+results = EMAC(data, param_dict=optimal_params)
+results.plot(title='Mean reversion cumulative returns')
+
+
+
+# STRATEGY 6: ALWAYS BUY/SELL IPO (extension: given conditions) (or just general analysis)
