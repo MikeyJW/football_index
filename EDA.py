@@ -7,8 +7,7 @@ Created on Tue Jun 30 13:13:43 2020
 
 ''' EDA '''
 
-#TODO: Remove short smaples from the mkt beta calculations (or do the top 100 format)
-#TODO: Make top 200 mask dynamic
+#TODO: Remove short samples from the mkt beta calculations (or do the top 100 format)
 
 import pandas as pd
 import numpy as np
@@ -45,14 +44,10 @@ mkt_log_returns.cumsum().apply(np.exp).plot(title='Benchmark')
 
 # Comparing to SP500
 SPY = yf.Ticker('SPY')
-SPY_history = SPY.history(start=start_date, end=end_date) # Care dont overuse, works on yahoo scraping.
-SPY_returns = SPY_history['Close'].pct_change(1) + 1
+#SPY_history = SPY.history(start=start_date, end=end_date)['Close'] # Care dont overuse, works on yahoo scraping.
+SPY_log_returns = SPY_history.apply(np.log).diff(1)
+SPY_log_returns.cumsum().apply(np.exp).plot(title='SPY returns')
 
-
-# PLOT: Market aggregates
-# TODO: put epl start/end dates in for reference.
-mkt_returns = mkt_log_returns.apply(np.exp)
-mkt_returns.plot(title='Daily market returns')
 
 # Benchmark Sharpe ratio
 benchmark_sharpe = gen_daily_sharpe(mkt_returns)
@@ -66,10 +61,11 @@ SPY_returns.plot(title='Daily SPY returns')
 SPY_sharpe = gen_daily_sharpe(SPY_returns)
 print('SPY Sharpe ratio: ' + str(SPY_sharpe))
 
-plt.plot(index_price) # Compare this to the money in circulation stats from FIE
+
+# KDE plots
 sns.kdeplot(mkt_returns) # Comp to norm dist/SPY
 sns.kdeplot(SPY_returns)
-sns.kdeplot(np.random.randn(mkt_returns.variance, mean=0)) #etc... norm dist
+#sns.kdeplot(np.random.randn(mkt_returns.variance, mean=0)) #etc... norm dist
 
 plt.boxplot(mkt_returns.dropna())
 
@@ -119,7 +115,7 @@ print(results)
 
 optimal_params =  {'holding_period': 7,
                    'lookback_window': 7}
-
+# TODO: Get grid_search returning optimal params to chuck in. (then only run optimals in the final thing.)
 results = momentum_strat(data, param_dict=optimal_params)
 results.plot(title='Momentum strategy cumulative returns')
 
@@ -177,7 +173,7 @@ results.plot(title='Mean reversion cumulative returns')
 
 
 
-# STRATEGY 5.2: EMAC (aggregate market)
+# STRATEGY 5.2: EMAC
 data = top200.loc[(slice(None),'Mohamed Salah'), 'EndofDayPrice'].unstack()
 strategy = EMAC
 param_grid = {'duration_EMA1': [5, 22],
@@ -193,7 +189,3 @@ results.plot(title='Mean reversion cumulative returns')
 
 # Shows potential given Salah's dropped in value, and it didn't lose as much relative to benchmark, couldve gained some
 # See if we can optimise.
-
-
-
-# STRATEGY 6: ALWAYS BUY/SELL IPO (extension: given conditions) (or just general analysis)
