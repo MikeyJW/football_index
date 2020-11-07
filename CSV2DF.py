@@ -9,7 +9,8 @@ import pandas as pd
 
 csv_list = ['Q3_2019.csv', 'Q4_2019P1.csv',
             'Q4_2019P2.csv', 'Q1_2020P1.csv',
-            'Q1_2020P2.csv', 'Q2_2020P1.csv']
+            'Q1_2020P2.csv', 'Q2_2020.csv',
+            'Q3_2020.csv', 'Q4_2020.csv']
 
 # Initialise dataframe and combine seperate csv's
 df = pd.DataFrame()
@@ -39,21 +40,5 @@ df['ave_mkt_price'] = mkt_price.reindex(df.index, level=0)
 df['daily_mkt_returns'] = mkt_returns.reindex(df.index, level=0)
 
 # Save dataframe
-#df.to_csv('out.csv')
+df.to_csv('Q32019_present.csv')
 #############################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
