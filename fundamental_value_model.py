@@ -54,12 +54,6 @@ corr_table = X.corr()
 #mask[np.triu_indices_from(mask)] = True
 sns.heatmap(corr_table, cmap="YlGnBu")
 
-# Check for multicollinearity among explanatory vars
-corr_table = X.corr()
-#mask = np.zeros_like(corr_table)
-#mask[np.triu_indices_from(mask)] = True
-sns.heatmap(corr_table, cmap="YlGnBu")
-
 # Proceed
 
 model = sm.OLS(y, X).fit(cov_type='HC0')

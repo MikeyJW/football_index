@@ -44,7 +44,7 @@ def custom_grid_search(data, strategy, param_grid):
     optimal = results['Combination ' + str(optimal_index)]
     
     print('Optimal: \n' + str(optimal))
-    return results
+    return results, optimal
 
 def custom_resampler(resampled_df):
     return resampled_df.head(1)
