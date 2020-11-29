@@ -24,7 +24,7 @@ df.set_index('PlayerName', inplace=True)
 
 #df.drop('num_games_played', axis=1, inplace=True)
 
-# Gen X and y matrices/vectors, leaving out forward to avoid indicator variable trap
+# Gen X and y matrices/vectors, leaving out forward to avoid multicollinearity problems
 y_col = 'CurrentPrice'
 X_cols = ['ave_matchday_score',
           'Age',
@@ -32,7 +32,7 @@ X_cols = ['ave_matchday_score',
           'Midfielder',
           'Defender',
           'Goalkeeper']
-    
+
 y = df[y_col]
 X = df[X_cols]
 
@@ -71,7 +71,7 @@ sns.kdeplot(y_train, label='Testing set', ax=ax)
 
 # MODEL 1: Benchmark 
 lm = LinearRegression()
-model = lm.fit(X_train, y_train)
+model_1 = lm.fit(X_train, y_train)
 coeffs = model.coef_
 
 np.mean(cross_val_score(lm, X_train, y_train, scoring='neg_mean_absolute_error'))
@@ -114,7 +114,7 @@ rf = RandomForestRegressor(n_jobs=-1)
 np.mean(cross_val_score(rf, X_train, y_train, scoring='neg_mean_absolute_error'))
 
 
-# we maybe now have an overfit rf model, too much complexity, not much improvement, lets tune some hyperparams to see what we get...
+# Not much improvement, lets tune some hyperparams to see what we get...
 # Grid search optimise the random forest
 
 # Narrow down your options
@@ -151,5 +151,5 @@ final_model = LinearRegression().fit(X_train, y_train)
 y_pred_test = model.predict(X_test)
 mean_absolute_error(y_test, y_pred_test)
 
-# Prefer lin reg model, as explicit better than implicit.
+# Prefer lin reg model, as occams protocol and explicit better than implicit.
 # This actually generalises nicely as well.
