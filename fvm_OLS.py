@@ -11,25 +11,26 @@ import seaborn as sns
 import statsmodels.api as sm
 
 # Import model data
-df = pd.read_csv('model_data.csv')
+path = 'file:///C:/Users/micha/Documents/Quant/football_index/model_data.csv'
+df = pd.read_csv(path)
 df.set_index('PlayerName', inplace=True)
 
 # Generate positional dummies
 df = pd.get_dummies(df, prefix='', prefix_sep='')
 
-yX['Age2'] = yX['Age']**2
-yX['ave_matchday_score2'] = yX['ave_matchday_score']**2
+#df['Age2'] = df['Age']**2
+#df['ave_matchday_score2'] = df['ave_matchday_score']**2
 
 # Regress
-y = yX['CurrentPrice']
-X = yX[['Age', 'ave_matchday_score', #'num_games_played', 
+y = df['CurrentPrice']
+X = df[['Age', 'ave_matchday_score', #'num_games_played', 
         'Forward', 'Midfielder', 'Defender', 'Goalkeeper']]
 
-# Check for multicollinearity among explanatory vars
+# Check for multicollinearity among explanatory vars (especially the squares)
 corr_table = X.corr()
 #mask = np.zeros_like(corr_table)
 #mask[np.triu_indices_from(mask)] = True
-sns.heatmap(corr_table, cmap="YlGnBu")
+sns.heatmap(corr_table, annot=True, cmap="YlGnBu")
 
 # Proceed
 
@@ -38,15 +39,26 @@ model.summary()
 
 # Optimise your spec
 
-# Consider 
-sm.graphics.plot_partregress('CurrentPrice', 'Age', ['ave_matchday_score', 'Forward', 'Midfielder', 'Defender', 'Goalkeeper'], data=yX, obs_labels=False)
-# Try a square of age (check how you check if that's a valid change)
-sm.graphics.plot_partregress('CurrentPrice', 'ave_matchday_score', ['Age', 'Forward', 'Midfielder', 'Defender', 'Goalkeeper'], data=yX, obs_labels=False)
-# Try a square (or more?)
+# Consider partial regression plots
+sm.graphics.plot_partregress('CurrentPrice', 'Age', ['ave_matchday_score', 'Forward', 'Midfielder', 'Defender', 'Goalkeeper'], data=df, obs_labels=False)
+
+sm.graphics.plot_partregress('CurrentPrice', 'ave_matchday_score', ['Age', 'Forward', 'Midfielder', 'Defender', 'Goalkeeper'], data=df, obs_labels=False)
+
 # SAY THEY COULD BE OUTLIERS THO. lOOK AT THEM PLOTS, THEY'RE PRETTY WILD
 
 
-X_adjusted = yX[['Age', 'Age2', 'ave_matchday_score', 'ave_matchday_score^2',#'num_games_played', 
+# Since squares are going to be highly correlated w/ their lower order counterparts we center them first
+to_center = df[['Age', 'ave_matchday_score']]
+df_centered = to_center.subtract(to_center.mean())
+positional_indicators = ['Forward', 'Midfielder', 'Defender', 'Goalkeeper']
+df_centered[positional_indicators] = df[positional_indicators]
+
+
+df_centered['Age2'] = df_centered['Age']**2
+df_centered['ave_matchday_score2'] = df_centered['ave_matchday_score']**2
+
+
+X_adjusted = df_centered[['Age', 'Age2', 'ave_matchday_score', 'ave_matchday_score2',#'num_games_played', 
         'Forward', 'Midfielder', 'Defender', 'Goalkeeper']]
 
 model = sm.OLS(y, X_adjusted).fit(cov_type='HC0')
